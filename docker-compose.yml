@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:alpine
+    restart: always
+    networks: 
+      - backend
+    environment:
+      - POSTGRES_USER=dev
+      - POSTGRES_PASSWORD=dev-pwd
+      - POSTGRES_NAME=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db_data:/var/lib/postgresql/data
+      - ./config/init.sql:/docker-entrypoint-initdb.d/10-init.sql
+    # healthcheck:
+    #    test: [ "CMD", "pg_isready -d postgres -U dev"]
+    #    timeout: 45s
+    #    interval: 10s
+    #    retries: 5
+
+  api:
+      build: .
+      networks:
+        - backend
+      ports:
+        - "8080:8080"
+      volumes:
+        - .:/app
+      depends_on:
+        - db
+#          condition: service_healthy
+volumes:
+  db_data:
+
+networks:
+  backend:
+    driver: bridge
