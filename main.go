@@ -28,12 +28,14 @@ func main() {
 	sugar.Info("Hello from zap logger")
 	defer logger.Sync()
 
+	v := database.NewValidation()
+
 	//Connect to database
 	db := database.NewDB(logger)
-	db.Connect()
+	defer db.Close()
 
 	//Create handlers
-	ah := handlers.NewArticles(logger)
+	ah := handlers.NewArticles(logger, db, v)
 
 	// CORS
 	ch := gohandlers.CORS(gohandlers.AllowedOrigins([]string{"*"}))
@@ -44,13 +46,16 @@ func main() {
 	//Register handlers for the API's
 	getR := sm.Methods(http.MethodGet).Subrouter()
 	getR.HandleFunc("/articles/{id:[0-9]+}", ah.Get)
-	getR.HandleFunc("/tags/{tag:(?:[^/]+})}/{date:(?:[0-9]{4}0[1-9]|1[0-2]0[1-9]|[12][0-9]|3[01])}", ah.GetTagSummary)
+	//re := regexp.MustCompile(`^/tags/(?:[^/]+)/((?:2016|2022)(?:0[1-9]|1[0-2])(?:0[1-9]|[12][0-9]|3[01]))$`)
+
+	//getR.HandleFunc("/tags/{tag:(?:[^/]+)}/{date:((?:2016|2022)(?:0[1-9]|1[0-2])(?:0[1-9]|[12][0-9]|3[01]))$)}", ah.GetTagSummary)
+	getR.HandleFunc("/tags/{tag:[a-z]+}", ah.GetTagSummary)
 
 	postR := sm.Methods(http.MethodPost).Subrouter()
 	postR.HandleFunc("/articles", ah.Create)
-	//postR.Use(ah.MiddlewareValidateProduct)
-	//Create a new server
+	postR.Use(ah.MiddlewareValidateArticle)
 
+	//Create a new server
 	s := http.Server{
 		Addr:    bindAddress, // configure the bind address
 		Handler: ch(sm),      // set the default handler
@@ -77,7 +82,6 @@ func main() {
 	// trap sigterm or interupt and gracefully shutdown the server
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
-	//signal.Notify(c, os.Kill)
 
 	// Block until a signal is received.
 	sig := <-c
